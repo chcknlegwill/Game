@@ -4,8 +4,8 @@
 int main(int argc, char* argv[]) {
     std::cout << "Starting program (initialising variables and so on)..." << std::endl;
 
-    int SCREEN_WIDTH = 800;
-    int SCREEN_HEIGHT = 600;
+    int SCREEN_WIDTH = 810;
+    int SCREEN_HEIGHT = 610;
     //screen variables need to be here for window creation (SDL_CreateWindow)
 
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -33,7 +33,16 @@ int main(int argc, char* argv[]) {
 
     //main code starts here
 
-    int GRID_SIZE = 10;
+    const int grid_size = 10; //not px, but numb of cells you want
+    const int GRID_ROWS = grid_size, GRID_COLS = grid_size; //changes the size of the grid, no matter the window size
+    const int PADDING = 10; //in px, padding around the edges 
+
+    //below makes sure that the grid is equal no matter window size (height or width) 
+    int window_width, window_height;
+    SDL_GetWindowSize(window, &window_width, &window_height);
+    float CELL_WIDTH = (window_width - 2 * PADDING)  / GRID_COLS; 
+    float CELL_HEIGHT = (window_height -2 * PADDING) / GRID_ROWS;
+    std::cout << "Grid: " << GRID_ROWS << "x" << GRID_COLS << "| Cell(px): " << CELL_WIDTH << "x" << CELL_HEIGHT << std::endl;
 
     bool running = true;
     SDL_Event event;
@@ -48,13 +57,17 @@ int main(int argc, char* argv[]) {
 
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255); //set render colour for white lines
 
-        for (int x =0; x <= SCREEN_WIDTH; x += GRID_SIZE) {
-          SDL_RenderDrawLine(renderer, x, 0, x, SCREEN_HEIGHT);
-        } //horizontal lines (x-axis)
+        //vertical lines
+        for (int i = 0; i <= GRID_COLS; i++) {
+            int x = PADDING + i * CELL_WIDTH;
+            SDL_RenderDrawLine(renderer, x, PADDING, x, PADDING + GRID_ROWS * CELL_HEIGHT);
+        }
 
-        for (int y = 0; y <= SCREEN_HEIGHT; y += GRID_SIZE) {
-          SDL_RenderDrawLine(renderer, 0, y, SCREEN_WIDTH, y);
-        } //vertical lines (y-axis)
+        //horizontal lines
+        for (int i = 0; i <= GRID_ROWS; i++) {
+          int y = PADDING + i * CELL_HEIGHT;
+          SDL_RenderDrawLine(renderer, PADDING, y, PADDING + GRID_COLS * CELL_WIDTH, y);
+        }
 
         SDL_RenderPresent(renderer);
 
