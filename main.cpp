@@ -294,7 +294,7 @@ int main(int argc, char* argv[]) {
             model = glm::rotate(model, glm::radians(90.0f), glm::vec3(2.0f, 0.0f, 0.0f));
             float scaleFactor = 0.5f;
             model = glm::scale(model, glm::vec3(scaleFactor));
-            model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.02f));
+            model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.00f));
             glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
             glUniform4f(glGetUniformLocation(shaderProgram, "baseColor"), 0.5f, 0.5f, 0.5f, 1.0f);
             glBindVertexArray(unit.vao);
