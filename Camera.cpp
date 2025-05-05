@@ -1,4 +1,4 @@
-#include "Camera.hpp"
+#include "Camera.h"
 #include <glm/gtc/type_ptr.hpp>
 
 Camera::Camera(float posX, float posY, float posZ, float initialYaw, float initialPitch)
