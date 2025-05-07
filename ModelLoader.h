@@ -1,19 +1,6 @@
-#ifndef MODEL_LOADER_H
-#define MODEL_LOADER_H
-
-#include <vector>
+#pragma once
 #include <string>
-#include <GL/glew.h> //for GLuint variable
-#include <glm/glm.hpp>
-
-struct Unit3D {
-  int gridX, gridY;
-  glm::vec3 position;
-  GLuint vao, vbo, ebo;
-  int vertexCount;
-  int indexCount;
-};
+#include <vector>
+#include "GameLogic.h" // Includes Unit3D definition
 
 std::vector<Unit3D> loadModels(const std::string& path);
-
-#endif

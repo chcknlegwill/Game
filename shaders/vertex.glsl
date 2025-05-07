@@ -1,32 +1,30 @@
 #version 330 core
-in vec3 Normal;
-in vec3 FragPos;
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D texture1;
-uniform bool useTexture;
-uniform bool isSkybox;
-uniform vec4 baseColor;
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aNormal;
+layout (location = 2) in vec2 aTexCoord;
+
+out vec3 FragPos;
+out vec3 Normal;
+out vec2 TexCoord;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+uniform int isSkybox;
+
 void main() {
-    if (isSkybox) {
-        vec3 norm = normalize(FragPos);
-        float t = (norm.z + 1.0) * 0.5;
-        vec3 color = mix(vec3(0.7, 0.8, 1.0), vec3(0.3, 0.5, 0.8), t);
-        FragColor = vec4(color, 1.0);
-    } else if (useTexture) {
-        vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
-        vec3 norm = normalize(Normal);
-        float diff = max(dot(norm, lightDir), 0.0);
-        vec4 texColor = texture(texture1, TexCoord);
-        vec3 diffuse = diff * texColor.rgb;
-        vec3 ambient = 0.2 * texColor.rgb;
-        FragColor = vec4(ambient + diffuse, texColor.a);
-    } else {
-        vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
-        vec3 norm = normalize(Normal);
-        float diff = max(dot(norm, lightDir), 0.0);
-        vec3 diffuse = diff * baseColor.rgb;
-        vec3 ambient = 0.2 * baseColor.rgb;
-        FragColor = vec4(ambient + diffuse, baseColor.a);
-    }
+    // Transform vertex position to world space
+    FragPos = vec3(model * vec4(aPos, 1.0));
+    
+    // Transform normal to world space (for lighting)
+    Normal = mat3(transpose(inverse(model))) * aNormal;
+    
+    // Pass texture coordinates
+    TexCoord = aTexCoord;
+
+    // Skybox: remove translation from view matrix if isSkybox is 1
+    mat4 viewNoTranslation = isSkybox == 1 ? mat4(mat3(view)) : view;
+    
+    // Transform vertex position to clip space
+    gl_Position = projection * viewNoTranslation * model * vec4(aPos, 1.0);
 }

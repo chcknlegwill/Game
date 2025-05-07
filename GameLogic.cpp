@@ -4,25 +4,47 @@
 #include "ModelLoader.h"
 
 bool isIslandCell(int gridX, int gridY) {
-    // Island 1 at (-10, -10) to (-8, -8)
     if (gridX >= 5 && gridX <= 7 && gridY >= 5 && gridY <= 7) {
         return true;
     }
-    // Island 2 at (10, 10) to (12, 12)
     if (gridX >= 25 && gridX <= 27 && gridY >= 25 && gridY <= 27) {
         return true;
     }
     return false;
 }
 
+void selectUnit(const SDL_Event& event, std::vector<Unit3D>& units, int gridX, int gridY) {
+    if (event.type != SDL_MOUSEBUTTONDOWN || event.button.button != SDL_BUTTON_LEFT) return;
+    for (auto& unit : units) {
+        unit.isSelected = (unit.gridX == gridX && unit.gridY == gridY);
+    }
+}
+
 void handleCombat(const SDL_Event& event, std::vector<Unit3D>& units) {
-    if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_SPACE && !units.empty()) {
-        for (size_t i = 1; i < units.size(); ++i) {
-            float dist = glm::distance(units[0].position, units[i].position);
+    if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_SPACE) {
+        Unit3D* selectedUnit = nullptr;
+        for (auto& unit : units) {
+            if (unit.isSelected) {
+                selectedUnit = &unit;
+                break;
+            }
+        }
+        if (!selectedUnit) return;
+
+        for (size_t i = 0; i < units.size(); ++i) {
+            if (&units[i] == selectedUnit) continue;
+            float dist = glm::distance(selectedUnit->position, units[i].position);
             if (dist <= 2.0f) {
-                std::cout << "Carrier attacks plane at gridX=" << units[i].gridX << ", gridY=" << units[i].gridY << "!" << std::endl;
-                units.erase(units.begin() + i);
-                --i;
+                units[i].health -= selectedUnit->attackPower;
+                std::cout << "Unit at gridX=" << units[i].gridX << ", gridY=" << units[i].gridY 
+                          << " takes " << selectedUnit->attackPower << " damage, health now " 
+                          << units[i].health << std::endl;
+                if (units[i].health <= 0) {
+                    std::cout << "Unit at gridX=" << units[i].gridX << ", gridY=" << units[i].gridY 
+                              << " destroyed!" << std::endl;
+                    units.erase(units.begin() + i);
+                    --i;
+                }
             }
         }
     }

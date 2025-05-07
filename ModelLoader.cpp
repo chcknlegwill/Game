@@ -5,24 +5,26 @@
 #include <iostream>
 #include <GL/glew.h>
 
-
 std::vector<Unit3D> loadModels(const std::string& path) {
-  std::cout << "Attempting to load model: " << path << std::endl;
-  std::vector<Unit3D> units;
-  {
-      Assimp::Importer importer;
-      const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_FixInfacingNormals);
-      if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
-          std::cerr << "Assimp error: " << importer.GetErrorString() << std::endl;
-          return units;
-      }
+    std::cout << "Attempting to load model: " << path << std::endl;
+    std::vector<Unit3D> units;
+
+    // Load model using Assimp
+    Assimp::Importer importer;
+    const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_FixInfacingNormals);
+    if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
+        std::cerr << "Assimp error: " << importer.GetErrorString() << std::endl;
+        return units;
+    }
     std::cout << "Loaded model: " << path << ", meshes: " << scene->mNumMeshes << std::endl;
 
+    // Process each mesh in the model
     for (unsigned int meshIdx = 0; meshIdx < scene->mNumMeshes; meshIdx++) {
         aiMesh* mesh = scene->mMeshes[meshIdx];
         std::vector<float> vertices;
         std::vector<unsigned int> indices;
 
+        // Extract vertices (position, normal, UVs)
         for (unsigned int i = 0; i < mesh->mNumVertices; i++) {
             // Position
             vertices.push_back(mesh->mVertices[i].x);
@@ -50,6 +52,7 @@ std::vector<Unit3D> loadModels(const std::string& path) {
             }
         }
 
+        // Extract indices
         for (unsigned int i = 0; i < mesh->mNumFaces; i++) {
             aiFace face = mesh->mFaces[i];
             for (unsigned int j = 0; j < face.mNumIndices; j++) {
@@ -57,6 +60,7 @@ std::vector<Unit3D> loadModels(const std::string& path) {
             }
         }
 
+        // Create Unit3D and set up OpenGL buffers
         Unit3D unit;
         unit.gridX = 0;
         unit.gridY = 0;
@@ -90,5 +94,4 @@ std::vector<Unit3D> loadModels(const std::string& path) {
     }
 
     return units;
-
 }

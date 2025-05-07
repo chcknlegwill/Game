@@ -9,6 +9,7 @@
 #include "Camera.hpp"
 #include "GameLogic.h"
 #include "Renderer.h"
+#include "Utils.hpp"
 
 // Define global gridVertices (matches extern in Renderer.h)
 std::vector<float> gridVertices;
@@ -19,10 +20,12 @@ static GLuint oceanVao, oceanVbo, gridVao, gridVbo, islandVao, islandVbo, island
 static GLuint cloudVao, cloudVbo, skyboxVao, skyboxVbo;
 static Camera* camera = nullptr;
 static glm::mat4 projection;
-static GLuint carrierTexture, islandTexture, cloudTexture;
+static GLuint carrierTexture = 0, islandTexture = 0, cloudTexture = 0;
 static float cloudTime = 0.0f;
+static int windowWidth = 810, windowHeight = 610;
 
 std::string readFile(const std::string& path) {
+    std::cerr << "Attempting to open file: " << path << std::endl;
     std::ifstream file(path);
     if (!file.is_open()) {
         std::cerr << "Failed to open " << path << std::endl;
@@ -34,6 +37,8 @@ std::string readFile(const std::string& path) {
 }
 
 bool initSDLAndOpenGL(int width, int height) {
+    windowWidth = width;
+    windowHeight = height;
     if (SDL_Init(SDL_INIT_VIDEO) < 0 || !(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG)) {
         std::cerr << "SDL/Image init failed: " << SDL_GetError() << std::endl;
         return false;
@@ -42,7 +47,7 @@ bool initSDLAndOpenGL(int width, int height) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    window = SDL_CreateWindow("3D Strategy Game", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_OPENGL);
+    window = SDL_CreateWindow("3D Strategy Game", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     if (!window) {
         std::cerr << "Window creation failed: " << SDL_GetError() << std::endl;
         IMG_Quit();
@@ -73,8 +78,9 @@ bool initSDLAndOpenGL(int width, int height) {
 }
 
 GLuint setupShaders() {
-    std::string vertexSource = readFile("shaders/vertex.glsl");
-    std::string fragmentSource = readFile("shaders/fragment.glsl");
+    // Use relative path from build/ directory to project root
+    std::string vertexSource = readFile("../shaders/vertex.glsl");
+    std::string fragmentSource = readFile("../shaders/fragment.glsl");
     if (vertexSource.empty() || fragmentSource.empty()) return 0;
 
     GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -250,23 +256,18 @@ bool setupRendering(GLuint shaderProgram, std::vector<Unit3D>& units) {
 
     // Textures
     std::string texturePath = getResourcePath("textures/carrier_texture.png");
-    std::string getResourcePath(const std::string& relativePath) {
-      // Base path could be set via config or environment variable
-      std::string basePath = "../Models/";
-      return basePath + relativePath;
-  }
-
     SDL_Surface* surface = IMG_Load(texturePath.c_str());
     if (!surface) {
         std::cerr << "Failed to load carrier texture: " << IMG_GetError() << std::endl;
         return false;
     }
+
     std::cout << "Carrier texture loaded: " << surface->w << "x" << surface->h << std::endl;
     glGenTextures(1, &carrierTexture);
     glBindTexture(GL_TEXTURE_2D, carrierTexture);
     GLenum format = surface->format->BytesPerPixel == 4 ? GL_RGBA : GL_RGB;
     glTexImage2D(GL_TEXTURE_2D, 0, format, surface->w, surface->h, 0, format, GL_UNSIGNED_BYTE, surface->pixels);
-    glGenerateMipmap(GL_TEXTURE_2D);
+    glGenerateMipmap(GL_TEXTURE_2D); // Generate mipmaps for the 2D texture
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     SDL_FreeSurface(surface);
@@ -291,7 +292,12 @@ bool setupRendering(GLuint shaderProgram, std::vector<Unit3D>& units) {
 void runGameLoop(GLuint shaderProgram, std::vector<Unit3D>& units) {
     bool running = true;
     SDL_Event event;
+    Uint32 lastTime = SDL_GetTicks();
     while (running) {
+        Uint32 currentTime = SDL_GetTicks();
+        float deltaTime = (currentTime - lastTime) / 1000.0f;
+        lastTime = currentTime;
+
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) running = false;
             camera->update(event);
@@ -300,8 +306,8 @@ void runGameLoop(GLuint shaderProgram, std::vector<Unit3D>& units) {
             if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) {
                 int mouseX, mouseY;
                 SDL_GetMouseState(&mouseX, &mouseY);
-                float x = (2.0f * mouseX) / 810 - 1.0f;
-                float y = 1.0f - (2.0f * mouseY) / 610;
+                float x = (2.0f * mouseX) / windowWidth - 1.0f;
+                float y = 1.0f - (2.0f * mouseY) / windowHeight;
                 glm::vec4 rayClip = glm::vec4(x, y, -1.0, 1.0);
                 glm::vec4 rayEye = glm::inverse(projection) * rayClip;
                 rayEye = glm::vec4(rayEye.x, rayEye.y, -1.0, 0.0);
@@ -314,19 +320,31 @@ void runGameLoop(GLuint shaderProgram, std::vector<Unit3D>& units) {
                 glm::vec3 intersection = rayOrigin + t * rayWorld;
                 int gridX = std::floor(intersection.x + 15.0f);
                 int gridY = std::floor(intersection.y + 15.0f);
-                if (!units.empty() && !isIslandCell(gridX, gridY)) {
-                    for (auto& unit : units) {
-                        unit.gridX = gridX;
-                        unit.gridY = gridY;
+
+                bool unitClicked = false;
+                for (auto& unit : units) {
+                    if (unit.gridX == gridX && unit.gridY == gridY) {
+                        selectUnit(event, units, gridX, gridY);
+                        unitClicked = true;
+                        break;
                     }
-                    std::cout << "Moved carrier to gridX=" << gridX << ", gridY=" << gridY << std::endl;
+                }
+
+                if (!unitClicked && !isIslandCell(gridX, gridY)) {
+                    for (auto& unit : units) {
+                        if (unit.isSelected) {
+                            unit.gridX = gridX;
+                            unit.gridY = gridY;
+                            std::cout << "Moved unit to gridX=" << gridX << ", gridY=" << gridY << std::endl;
+                        }
+                    }
                 } else if (isIslandCell(gridX, gridY)) {
                     std::cout << "Cannot move to island at gridX=" << gridX << ", gridY=" << gridY << std::endl;
                 }
             }
         }
 
-        cloudTime += 0.01f;
+        cloudTime += 0.5f * deltaTime;
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glUseProgram(shaderProgram);
 
@@ -389,9 +407,6 @@ void runGameLoop(GLuint shaderProgram, std::vector<Unit3D>& units) {
         glDepthMask(GL_TRUE);
 
         // Carrier
-        glBindTexture(GL_TEXTURE_2D, carrierTexture);
-        glUniform1i(glGetUniformLocation(shaderProgram, "texture1"), 0);
-        glUniform1i(glGetUniformLocation(shaderProgram, "useTexture"), 1);
         for (auto& unit : units) {
             model = glm::mat4(1.0f);
             float worldX = unit.gridX - 15.0f + 0.5f;
@@ -400,7 +415,16 @@ void runGameLoop(GLuint shaderProgram, std::vector<Unit3D>& units) {
             model = glm::translate(model, unit.position);
             model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
             model = glm::scale(model, glm::vec3(0.5f));
-            std::cout << "Rendering unit at position: (" << worldX << ", " << worldY << ", 0.0)" << std::endl;
+            
+            if (unit.isSelected) {
+                glUniform4f(glGetUniformLocation(shaderProgram, "baseColor"), 1.0f, 1.0f, 0.0f, 1.0f);
+                glUniform1i(glGetUniformLocation(shaderProgram, "useTexture"), 0);
+            } else {
+                glBindTexture(GL_TEXTURE_2D, carrierTexture);
+                glUniform1i(glGetUniformLocation(shaderProgram, "texture1"), 0);
+                glUniform1i(glGetUniformLocation(shaderProgram, "useTexture"), 1);
+            }
+            
             glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
             glBindVertexArray(unit.vao);
             glDrawElements(GL_TRIANGLES, unit.indexCount, GL_UNSIGNED_INT, 0);
@@ -411,18 +435,39 @@ void runGameLoop(GLuint shaderProgram, std::vector<Unit3D>& units) {
     }
 }
 
-void cleanupSDLAndOpenGL() {
-    glDeleteTextures(1, &carrierTexture);
-    glDeleteTextures(1, &islandTexture);
-    glDeleteTextures(1, &cloudTexture);
-    glDeleteVertexArrays(1, &oceanVao); glDeleteBuffers(1, &oceanVbo);
-    glDeleteVertexArrays(1, &gridVao); glDeleteBuffers(1, &gridVbo);
-    glDeleteVertexArrays(1, &islandVao); glDeleteBuffers(1, &islandVbo); glDeleteBuffers(1, &islandEbo);
-    glDeleteVertexArrays(1, &cloudVao); glDeleteBuffers(1, &cloudVbo);
-    glDeleteVertexArrays(1, &skyboxVao); glDeleteBuffers(1, &skyboxVbo);
+void cleanupSDLAndOpenGL(std::vector<Unit3D>& units) {
+    // Clean up unit resources
+    for (auto& unit : units) {
+        glDeleteVertexArrays(1, &unit.vao);
+        glDeleteBuffers(1, &unit.vbo);
+        glDeleteBuffers(1, &unit.ebo);
+    }
+
+    // Clean up textures
+    if (carrierTexture != 0) glDeleteTextures(1, &carrierTexture);
+    if (islandTexture != 0) glDeleteTextures(1, &islandTexture);
+    if (cloudTexture != 0) glDeleteTextures(1, &cloudTexture);
+
+    // Clean up VAOs and VBOs
+    if (oceanVao != 0) glDeleteVertexArrays(1, &oceanVao);
+    if (oceanVbo != 0) glDeleteBuffers(1, &oceanVbo);
+    if (gridVao != 0) glDeleteVertexArrays(1, &gridVao);
+    if (gridVbo != 0) glDeleteBuffers(1, &gridVbo);
+    if (islandVao != 0) glDeleteVertexArrays(1, &islandVao);
+    if (islandVbo != 0) glDeleteBuffers(1, &islandVbo);
+    if (islandEbo != 0) glDeleteBuffers(1, &islandEbo);
+    if (cloudVao != 0) glDeleteVertexArrays(1, &cloudVao);
+    if (cloudVbo != 0) glDeleteBuffers(1, &cloudVbo);
+    if (skyboxVao != 0) glDeleteVertexArrays(1, &skyboxVao);
+    if (skyboxVbo != 0) glDeleteBuffers(1, &skyboxVbo);
+
+    // Clean up camera
     delete camera;
-    SDL_GL_DeleteContext(glContext);
-    SDL_DestroyWindow(window);
+    camera = nullptr;
+
+    // Clean up SDL and OpenGL context
+    if (glContext) SDL_GL_DeleteContext(glContext);
+    if (window) SDL_DestroyWindow(window);
     IMG_Quit();
     SDL_Quit();
 }
