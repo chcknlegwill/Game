@@ -5,15 +5,17 @@
 #include <iostream>
 #include <GL/glew.h>
 
+
 std::vector<Unit3D> loadModels(const std::string& path) {
-    std::cout << "Attempting to load model: " << path << std::endl;
-    std::vector<Unit3D> units;
-    Assimp::Importer importer;
-    const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals);
-    if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
-        std::cerr << "Assimp error: " << importer.GetErrorString() << std::endl;
-        return units;
-    }
+  std::cout << "Attempting to load model: " << path << std::endl;
+  std::vector<Unit3D> units;
+  {
+      Assimp::Importer importer;
+      const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_FixInfacingNormals);
+      if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
+          std::cerr << "Assimp error: " << importer.GetErrorString() << std::endl;
+          return units;
+      }
     std::cout << "Loaded model: " << path << ", meshes: " << scene->mNumMeshes << std::endl;
 
     for (unsigned int meshIdx = 0; meshIdx < scene->mNumMeshes; meshIdx++) {
@@ -22,12 +24,30 @@ std::vector<Unit3D> loadModels(const std::string& path) {
         std::vector<unsigned int> indices;
 
         for (unsigned int i = 0; i < mesh->mNumVertices; i++) {
+            // Position
             vertices.push_back(mesh->mVertices[i].x);
             vertices.push_back(mesh->mVertices[i].y);
             vertices.push_back(mesh->mVertices[i].z);
-            vertices.push_back(mesh->mNormals[i].x);
-            vertices.push_back(mesh->mNormals[i].y);
-            vertices.push_back(mesh->mNormals[i].z);
+            // Normal
+            if (mesh->HasNormals()) {
+                vertices.push_back(mesh->mNormals[i].x);
+                vertices.push_back(mesh->mNormals[i].y);
+                vertices.push_back(mesh->mNormals[i].z);
+            } else {
+                vertices.push_back(0.0f);
+                vertices.push_back(0.0f);
+                vertices.push_back(1.0f); // Default up normal
+            }
+            // Texture coordinates (UVs)
+            if (mesh->HasTextureCoords(0)) {
+                vertices.push_back(mesh->mTextureCoords[0][i].x);
+                vertices.push_back(mesh->mTextureCoords[0][i].y);
+                std::cout << "UV for vertex " << i << ": " << mesh->mTextureCoords[0][i].x << ", " << mesh->mTextureCoords[0][i].y << std::endl;
+            } else {
+                vertices.push_back(0.0f);
+                vertices.push_back(0.0f);
+                std::cout << "No UV for vertex " << i << ", using default (0, 0)" << std::endl;
+            }
         }
 
         for (unsigned int i = 0; i < mesh->mNumFaces; i++) {
@@ -52,10 +72,15 @@ std::vector<Unit3D> loadModels(const std::string& path) {
 
         glBindBuffer(GL_ARRAY_BUFFER, unit.vbo);
         glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+        // Position attribute
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+        // Normal attribute
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
         glEnableVertexAttribArray(1);
+        // Texture coordinate attribute
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+        glEnableVertexAttribArray(2);
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, unit.ebo);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
@@ -65,4 +90,5 @@ std::vector<Unit3D> loadModels(const std::string& path) {
     }
 
     return units;
+
 }
