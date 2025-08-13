@@ -1,3 +1,7 @@
+#avoids legacy fallbacks - defaults to the GLVND libraries
+set(OpenGL_GL_PREFERENCE GLVND)
+
+
 cmake_minimum_required(VERSION 3.10)
 project(StrategyGame)
 
